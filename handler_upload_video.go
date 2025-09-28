@@ -82,7 +82,19 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	key := getAssetPath(mediaType)
+	aspectRatio, err := getVideoAspectRatio(temp.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't get aspect ratio", err)
+		return
+	}
+
+	orientation, err := getVideoOrientation(aspectRatio)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't get video orientation", err)
+		return
+	}
+
+	key := orientation + "/" + getAssetPath(mediaType)
 	if _, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(key),
