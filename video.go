@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -39,6 +41,10 @@ func getVideoAspectRatio(filePath string) (string, error) {
 		return "", err
 	}
 
+	if len(ffprobe.Streams) == 0 {
+		return "", errors.New("no video streams found")
+	}
+
 	divisor := gcd(ffprobe.Streams[0].Height, ffprobe.Streams[0].Width)
 	return fmt.Sprintf(
 		"%d:%d",
@@ -51,16 +57,16 @@ func getVideoAspectRatio(filePath string) (string, error) {
 func getVideoOrientation(aspectRatio string) (string, error) {
 	split := strings.Split(aspectRatio, ":")
 	if len(split) < 2 {
-		return "", fmt.Errorf("invalid aspect ratio")
+		return "", errors.New("invalid aspect ratio")
 	}
 
 	height, err := strconv.Atoi(split[0])
 	if err != nil {
-		return "", fmt.Errorf("invalid aspect ratio")
+		return "", errors.New("invalid aspect ratio")
 	}
 	width, err := strconv.Atoi(split[1])
 	if err != nil {
-		return "", fmt.Errorf("invalid aspect ratio")
+		return "", errors.New("invalid aspect ratio")
 	}
 
 	if height > width {
@@ -70,6 +76,39 @@ func getVideoOrientation(aspectRatio string) (string, error) {
 	} else {
 		return "other", nil
 	}
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	processedFilePath := filePath + ".processing"
+	cmd := exec.Command(
+		"ffmpeg",
+		"-i",
+		filePath,
+		"-c",
+		"copy",
+		"-movflags",
+		"faststart",
+		"-f",
+		"mp4",
+		processedFilePath,
+	)
+
+	buf := bytes.Buffer{}
+	cmd.Stderr = &buf
+
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	fileInfo, err := os.Stat(processedFilePath)
+	if err != nil {
+		return "", err
+	}
+	if fileInfo.Size() == 0 {
+		return "", errors.New("processed file is empyt")
+	}
+
+	return processedFilePath, nil
 }
 
 func gcd(a, b int64) int64 {
